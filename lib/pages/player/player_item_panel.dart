@@ -19,7 +19,7 @@ import 'package:kazumi/pages/video/video_controller.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/pages/player/player_controller.dart';
 import 'package:flutter/services.dart';
-import 'package:kazumi/services/player/remote.dart';
+import 'package:kazumi/services/player/cast_controller.dart';
 import 'package:kazumi/bean/appbar/drag_to_move_bar.dart' as dtb;
 import 'package:kazumi/pages/settings/danmaku/danmaku_settings_sheet.dart';
 import 'package:kazumi/utils/constants.dart';
@@ -56,6 +56,7 @@ class PlayerItemPanel extends StatefulWidget {
     required this.skipOP,
     required this.showVideoInfo,
     required this.showSyncPlayPanel,
+    required this.showCastPanel,
     required this.pauseForTimedShutdown,
     this.disableAnimations = false,
   });
@@ -84,6 +85,7 @@ class PlayerItemPanel extends StatefulWidget {
   final VoidCallback skipOP;
   final VoidCallback showVideoInfo;
   final VoidCallback showSyncPlayPanel;
+  final VoidCallback showCastPanel;
   final VoidCallback pauseForTimedShutdown;
   final bool disableAnimations;
 
@@ -875,6 +877,25 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                     color: Colors.white,
                   ),
                 ),
+              AnimatedBuilder(
+                animation: CastController.instance,
+                builder: (BuildContext context, Widget? child) {
+                  final CastController cast = CastController.instance;
+                  return IconButton(
+                    onPressed: widget.showCastPanel,
+                    tooltip: cast.casting
+                        ? '投屏控制：${cast.deviceName ?? '未知设备'}'
+                        : '投屏',
+                    icon: Badge(
+                      isLabelVisible: cast.casting,
+                      child: Icon(
+                        cast.casting ? Icons.cast_connected : Icons.cast,
+                        color: Colors.white,
+                      ),
+                    ),
+                  );
+                },
+              ),
               if (compact) _buildDanmakuToggleButton(context),
               PlayerPanelHoldCollectButton(
                 acquirePlayerPanelHold: widget.acquirePlayerPanelHold,
@@ -915,18 +936,7 @@ class _PlayerItemPanelState extends State<PlayerItemPanel> {
                     label: '视频详情',
                   ),
                   KazumiMenuItem(
-                    onPressed: () {
-                      final needRestart = playerController.playback.playing;
-                      playerController.pause();
-                      RemotePlay()
-                          .castVideo(playerController.videoUrl,
-                              videoPageController.currentPlugin.referer)
-                          .whenComplete(() {
-                        if (mounted && needRestart) {
-                          playerController.play();
-                        }
-                      });
-                    },
+                    onPressed: widget.showCastPanel,
                     label: '远程投屏',
                   ),
                   KazumiMenuItem(

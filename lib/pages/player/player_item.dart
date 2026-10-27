@@ -30,6 +30,9 @@ import 'package:kazumi/services/storage/storage.dart';
 import 'package:kazumi/modules/danmaku/danmaku_module.dart';
 import 'package:kazumi/pages/player/controller/player_danmaku_controller.dart';
 import 'package:kazumi/pages/player/danmaku_source_sheet.dart';
+import 'package:kazumi/pages/player/cast_device_sheet.dart';
+import 'package:kazumi/pages/player/cast_control_sheet.dart';
+import 'package:kazumi/services/player/cast_controller.dart';
 import 'package:kazumi/pages/player/player_item_surface.dart';
 import 'package:mobx/mobx.dart' as mobx;
 import 'package:kazumi/pages/my/my_controller.dart';
@@ -1250,6 +1253,121 @@ class _PlayerItemState extends State<PlayerItem>
     );
   }
 
+  /// 投屏总入口：未投屏时先选设备，已投屏时直接打开控制面板。
+  Future<void> showCastPanel() async {
+    final CastController cast = CastController.instance;
+    if (cast.casting) {
+      await _openCastControlSheet();
+      return;
+    }
+    final bool wasPlaying = playerController.playback.playing;
+    if (wasPlaying) {
+      await playerController.pause();
+      if (!mounted) {
+        return;
+      }
+    }
+    final device = await showCastDeviceSheet(context);
+    if (!mounted) {
+      return;
+    }
+    if (device == null) {
+      if (wasPlaying && mounted) {
+        await playerController.play();
+      }
+      return;
+    }
+    await cast.connect(device);
+    final bool ok = await cast.cast(
+      playerController.videoUrl,
+      title: _castEpisodeTitle(),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (!ok) {
+      KazumiDialog.showToast(message: '投屏失败，请更换设备或稍后重试');
+      if (wasPlaying) {
+        await playerController.play();
+      }
+      return;
+    }
+    // 接收端已经接管画面，本地暂停以免双声道。
+    if (playerController.playback.playing) {
+      await playerController.pause();
+    }
+    cast.onCastFinished = _handleCastFinished;
+    await _openCastControlSheet();
+  }
+
+  Future<void> _openCastControlSheet() {
+    return showCastControlSheet(
+      context,
+      onSwitchDevice: _switchCastDevice,
+      onStopCasting: _stopCasting,
+      onEpisodeSkip: handlePreNextEpisode,
+    );
+  }
+
+  /// 接收端播完一集时触发：沿用「自动连播」设置续投下一集。
+  Future<void> _handleCastFinished() async {
+    if (!mounted) {
+      return;
+    }
+    if (!autoPlayNext) {
+      KazumiDialog.showToast(message: '本集已播完，自动连播已在设置中关闭');
+      return;
+    }
+    await handlePreNextEpisode('next');
+  }
+
+  Future<void> _switchCastDevice() async {
+    final CastController cast = CastController.instance;
+    final device = await showCastDeviceSheet(context);
+    if (!mounted || device == null) {
+      return;
+    }
+    await cast.connect(device);
+    final bool ok = await cast.cast(
+      playerController.videoUrl,
+      title: _castEpisodeTitle(),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (ok) {
+      KazumiDialog.showToast(message: '已切换到 ${device.info.friendlyName}');
+      await _openCastControlSheet();
+    } else {
+      KazumiDialog.showToast(message: '切换设备失败，请重试');
+    }
+  }
+
+  Future<void> _stopCasting() async {
+    final CastController cast = CastController.instance;
+    cast.onCastFinished = null;
+    await cast.disconnect();
+    if (!mounted) {
+      return;
+    }
+    KazumiDialog.showToast(message: '已停止投屏');
+    await playerController.play();
+  }
+
+  String _castEpisodeTitle() {
+    final selection = videoPageController.playbackEpisode;
+    final roads = videoPageController.roadList;
+    if (selection.road < 0 || selection.road >= roads.length) {
+      return videoPageController.title;
+    }
+    final identifier = roads[selection.road].identifier;
+    final int index = selection.episode - 1;
+    final String label = index >= 0 && index < identifier.length
+        ? identifier[index]
+        : '第${selection.episode}集';
+    return '${videoPageController.title} $label';
+  }
+
   @override
   void onWindowRestore() {
     playerController.danmaku.canvasController.clear();
@@ -1547,6 +1665,7 @@ class _PlayerItemState extends State<PlayerItem>
                             handleDanmaku: handleDanmaku,
                             showVideoInfo: showVideoInfo,
                             showSyncPlayPanel: showSyncPlayPanel,
+                            showCastPanel: showCastPanel,
                             pauseForTimedShutdown: widget.pauseForTimedShutdown,
                             disableAnimations: widget.disableAnimations,
                             handleScreenShot: handleScreenshot,
