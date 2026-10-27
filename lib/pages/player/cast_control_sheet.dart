@@ -14,7 +14,7 @@ Future<void> showCastControlSheet(
   BuildContext context, {
   required Future<void> Function() onSwitchDevice,
   required Future<void> Function() onStopCasting,
-  required Future<void> Function(String direction) onEpisodeSkip,
+  Future<void> Function(String direction)? onEpisodeSkip,
 }) {
   return showAdaptiveBottomSheet<void>(
     context: context,
@@ -33,12 +33,14 @@ class CastControlSheet extends StatefulWidget {
     super.key,
     required this.onSwitchDevice,
     required this.onStopCasting,
-    required this.onEpisodeSkip,
+    this.onEpisodeSkip,
   });
 
   final Future<void> Function() onSwitchDevice;
   final Future<void> Function() onStopCasting;
-  final Future<void> Function(String direction) onEpisodeSkip;
+
+  /// 为 null 表示播放页已销毁（例如从主页气泡进来），此时切集能力不可用。
+  final Future<void> Function(String direction)? onEpisodeSkip;
 
   @override
   State<CastControlSheet> createState() => _CastControlSheetState();
@@ -185,37 +187,58 @@ class _CastControlSheetState extends State<CastControlSheet> {
   }
 
   Widget _buildTransportRow(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    final Future<void> Function(String direction)? onEpisodeSkip =
+        widget.onEpisodeSkip;
+    final ThemeData theme = Theme.of(context);
+    return Column(
       children: <Widget>[
-        IconButton(
-          tooltip: '上一集',
-          onPressed: () => widget.onEpisodeSkip('prev'),
-          icon: const Icon(Icons.skip_previous_rounded),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            IconButton(
+              tooltip: '上一集',
+              onPressed: onEpisodeSkip == null
+                  ? null
+                  : () => onEpisodeSkip('prev'),
+              icon: const Icon(Icons.skip_previous_rounded),
+            ),
+            IconButton(
+              tooltip: '后退 10 秒',
+              onPressed: () => _cast.seekBy(-10),
+              icon: const Icon(Icons.replay_10_rounded),
+            ),
+            IconButton.filled(
+              tooltip: _cast.playing ? '暂停' : '播放',
+              iconSize: 32,
+              onPressed: _cast.togglePlay,
+              icon: Icon(
+                _cast.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              ),
+            ),
+            IconButton(
+              tooltip: '前进 10 秒',
+              onPressed: () => _cast.seekBy(10),
+              icon: const Icon(Icons.forward_10_rounded),
+            ),
+            IconButton(
+              tooltip: '下一集',
+              onPressed: onEpisodeSkip == null
+                  ? null
+                  : () => onEpisodeSkip('next'),
+              icon: const Icon(Icons.skip_next_rounded),
+            ),
+          ],
         ),
-        IconButton(
-          tooltip: '后退 10 秒',
-          onPressed: () => _cast.seekBy(-10),
-          icon: const Icon(Icons.replay_10_rounded),
-        ),
-        IconButton.filled(
-          tooltip: _cast.playing ? '暂停' : '播放',
-          iconSize: 32,
-          onPressed: _cast.togglePlay,
-          icon: Icon(
-            _cast.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        if (onEpisodeSkip == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '回到播放页后可以切集',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
-        ),
-        IconButton(
-          tooltip: '前进 10 秒',
-          onPressed: () => _cast.seekBy(10),
-          icon: const Icon(Icons.forward_10_rounded),
-        ),
-        IconButton(
-          tooltip: '下一集',
-          onPressed: () => widget.onEpisodeSkip('next'),
-          icon: const Icon(Icons.skip_next_rounded),
-        ),
       ],
     );
   }

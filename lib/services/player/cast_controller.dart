@@ -65,6 +65,23 @@ class CastController extends ChangeNotifier {
   bool get playing => transportState == 'PLAYING';
   bool get hasDevice => _device != null;
 
+  int _playerPageCount = 0;
+
+  /// 播放页是否还在路由栈里。离开播放页后为 false，主页上的投屏气泡才会浮出来。
+  bool get playerPageAttached => _playerPageCount > 0;
+
+  void attachPlayerPage() {
+    _playerPageCount++;
+    notifyListeners();
+  }
+
+  void detachPlayerPage() {
+    if (_playerPageCount > 0) {
+      _playerPageCount--;
+    }
+    notifyListeners();
+  }
+
   // ---------------------------------------------------------------- 设备发现
 
   Future<void> startDiscovery() async {

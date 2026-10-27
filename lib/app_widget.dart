@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/dialog/exit_confirmation_dialog.dart';
 import 'package:kazumi/bean/settings/theme_provider.dart';
+import 'package:kazumi/bean/widget/cast_floating_bubble.dart';
 import 'package:kazumi/navigation.dart';
 import 'package:kazumi/utils/constants.dart';
 import 'package:kazumi/utils/device.dart';
@@ -314,6 +315,14 @@ class _AppWidgetState extends State<AppWidget>
           darkTheme: effectiveDarkTheme,
           themeMode: themeProvider.themeMode,
           scaffoldMessengerKey: rootScaffoldMessengerKey,
+          builder: (BuildContext context, Widget? child) {
+            return Stack(
+              children: <Widget>[
+                if (child != null) child,
+                const Positioned.fill(child: CastFloatingBubble()),
+              ],
+            );
+          },
           routerConfig: ModularApp.routerConfigOf(context),
         );
       },

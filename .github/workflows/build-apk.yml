@@ -52,6 +52,9 @@ jobs:
         continue-on-error: true
 
       - name: Build APK (split per ABI)
+        # 测试版使用独立包名，可与正式版共存；正式构建不设该变量，包名保持原样
+        env:
+          ORG_GRADLE_PROJECT_kazumiAppIdSuffix: .cast
         run: flutter build apk --release --split-per-abi
 
       - name: Upload APK

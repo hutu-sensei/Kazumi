@@ -1376,6 +1376,7 @@ class _PlayerItemState extends State<PlayerItem>
   @override
   void initState() {
     super.initState();
+    CastController.instance.attachPlayerPage();
     playerController = widget.playerController;
     _initKeyboardActions();
     _initPlayerMenu();
@@ -1490,6 +1491,7 @@ class _PlayerItemState extends State<PlayerItem>
       PipUtils.disposePipHandler();
     }
     playerController.panel.reset();
+    CastController.instance.detachPlayerPage();
     super.dispose();
   }
 
