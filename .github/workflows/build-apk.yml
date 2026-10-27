@@ -53,9 +53,16 @@ jobs:
 
       - name: Build APK (split per ABI)
         # 测试版使用独立包名，可与正式版共存；正式构建不设该变量，包名保持原样
+        # KAZUMI_APPID / KAZUMI_KEY 是镜像签名凭据：未配置 secret 时为空，
+        # 代码会自动退回免签名镜像（api.bgmapi.com），搜索仍然可用
         env:
           ORG_GRADLE_PROJECT_kazumiAppIdSuffix: .cast
-        run: flutter build apk --release --split-per-abi
+          KAZUMI_APPID: ${{ secrets.KAZUMI_APPID }}
+          KAZUMI_KEY: ${{ secrets.KAZUMI_KEY }}
+        run: |
+          flutter build apk --release --split-per-abi \
+            --dart-define=KAZUMI_APPID="$KAZUMI_APPID" \
+            --dart-define=KAZUMI_KEY="$KAZUMI_KEY"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
