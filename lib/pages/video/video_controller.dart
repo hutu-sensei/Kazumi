@@ -24,6 +24,7 @@ import 'package:kazumi/utils/http_headers.dart';
 import 'package:kazumi/utils/media.dart';
 import 'package:kazumi/utils/async_session.dart';
 import 'package:kazumi/services/platform/display_mode_service.dart';
+import 'package:kazumi/services/player/cast_controller.dart';
 import 'package:kazumi/pages/video/video_fullscreen_controller.dart';
 
 part 'video_controller.g.dart';
@@ -471,6 +472,29 @@ abstract class _VideoPageController with Store implements Disposable {
       session: session,
       playerController: playerController,
     );
+
+    if (CastController.instance.casting && session.isActive) {
+      unawaited(_recastCastingEpisode(playerController, resolvedEpisode));
+    }
+  }
+
+  /// 投屏会话存在时，换集要把新片源一并推给接收端，否则投影仪还停在上一集。
+  Future<void> _recastCastingEpisode(
+    PlayerController playerController,
+    EpisodeRef resolvedEpisode,
+  ) async {
+    final CastController cast = CastController.instance;
+    final bool ok = await cast.recast(
+      playerController.videoUrl,
+      title: resolvedEpisode.displayTitle,
+    );
+    if (!ok) {
+      KazumiLogger().w('VideoPageController: failed to recast the new episode');
+      return;
+    }
+    // 接收端已经接管播放，本地播放器暂停一下避免双声道。
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    await playerController.pause();
   }
 
   Future<void> _changeOfflineEpisode(
