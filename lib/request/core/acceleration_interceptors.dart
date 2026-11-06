@@ -10,10 +10,6 @@ class BangumiAccelerationInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final uri = options.uri;
     if (ApiEndpoints.bangumiPublicApiHosts.contains(uri.host)) {
-      // 未注入签名凭据时镜像必然拒绝请求（401），退回免签名镜像保证可用
-      final String mirrorBase = hasBangumiMirrorCredentials
-          ? ApiEndpoints.bangumiMirrorDomain
-          : ApiEndpoints.bangumiUnsignedMirrorDomain;
       switch (BangumiAcceleration.current) {
         case BangumiAcceleration.direct:
           break;
@@ -22,6 +18,15 @@ class BangumiAccelerationInterceptor extends Interceptor {
           options.queryParameters = {};
           options.requireEch();
         case BangumiAcceleration.mirror:
+          // 自编译包没有签名凭据，签名镜像会对搜索返回 401。
+          // 仅搜索接口改走免签名镜像；每日放送、趋势、详情等路径
+          // 仍走上游镜像，因为免签名镜像未实现 /p1/* 且会返回假 200。
+          final bool unsignedSearch = !hasBangumiMirrorCredentials &&
+              options.method == 'POST' &&
+              uri.path == '/v0/search/subjects';
+          final String mirrorBase = unsignedSearch
+              ? ApiEndpoints.bangumiUnsignedMirrorDomain
+              : ApiEndpoints.bangumiMirrorDomain;
           options.path =
               mirrorBase + uri.path + (uri.hasQuery ? '?${uri.query}' : '');
           options.queryParameters = {};
