@@ -104,6 +104,10 @@ class BangumiClient {
   }
 
   bool _shouldSignProtectedMirrorRequest(String url, String method) {
+    // 没有注入凭据时签名必然无效，交给免签名镜像处理，不要发送空的 X-AppId
+    if (!hasBangumiMirrorCredentials) {
+      return false;
+    }
     final uri = Uri.parse(url);
     if (BangumiAcceleration.current != BangumiAcceleration.mirror ||
         !ApiEndpoints.bangumiPublicApiHosts.contains(uri.host)) {
