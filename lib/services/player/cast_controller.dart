@@ -53,6 +53,9 @@ class CastController extends ChangeNotifier {
   double speed = 1;
   bool? speedSupported;
   bool seekSupported = true;
+  /// 接收端是否实现了 GetPositionInfo（进度同步）。投屏后探测得出，
+  /// false 时 UI 隐藏进度条与拖动，退回「只投不控」，体验不弱于原版。
+  bool positionSupported = true;
 
   /// 本集在接收端播完时的回调，由播放页注入，用于自动续投下一集。
   Future<void> Function()? onCastFinished;
@@ -131,6 +134,7 @@ class CastController extends ChangeNotifier {
     speed = 1;
     speedSupported = null;
     seekSupported = true;
+    positionSupported = true;
     await stopDiscovery();
     notifyListeners();
   }
@@ -138,7 +142,7 @@ class CastController extends ChangeNotifier {
   // ------------------------------------------------------------------ 投屏
 
   /// 投一个新地址（首次投屏、换集、换设备都走这里）。
-  Future<bool> cast(String url, {String? title}) async {
+  Future<bool> cast(String url, {String? title, bool probe = true}) async {
     final DLNADevice? device = _device;
     if (device == null || url.isEmpty) {
       return false;
@@ -164,6 +168,9 @@ class CastController extends ChangeNotifier {
     transportState = 'PLAYING';
     position = Duration.zero;
     _finishArmed = false;
+    if (probe) {
+      await _probeCapabilities();
+    }
     _startPolling();
     notifyListeners();
     return true;
@@ -174,7 +181,8 @@ class CastController extends ChangeNotifier {
     if (!casting) {
       return false;
     }
-    return cast(url, title: title);
+    // 换集复用同一设备，能力已探测过，无需重复探测。
+    return cast(url, title: title, probe: false);
   }
 
   Future<void> togglePlay() async {
@@ -333,6 +341,34 @@ class CastController extends ChangeNotifier {
     return value.toStringAsFixed(2);
   }
 
+  /// 投屏建立后探测接收端的控制能力，弱设备自动降级为「只投不控」。
+  ///
+  /// - 进度：GetPositionInfo 返回 NOT_IMPLEMENTED 或抛错 → [positionSupported]=false
+  /// - 拖动：进度都不支持则必不支持；否则试一次 Seek(0)（无副作用）确认
+  Future<void> _probeCapabilities() async {
+    final DLNADevice? device = _device;
+    if (device == null || !casting) {
+      return;
+    }
+    try {
+      final String xml = await device.position();
+      positionSupported = !xml.toUpperCase().contains('NOT_IMPLEMENTED');
+    } catch (_) {
+      positionSupported = false;
+    }
+    if (!positionSupported) {
+      seekSupported = false;
+    } else {
+      try {
+        await device.seek(formatHms(Duration.zero));
+        seekSupported = true;
+      } catch (_) {
+        seekSupported = false;
+      }
+    }
+    notifyListeners();
+  }
+
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(milliseconds: 1200), (_) {
@@ -347,21 +383,23 @@ class CastController extends ChangeNotifier {
     }
     _polling = true;
     try {
-      final String positionXml = await device.position();
-      final RegExpMatch? durationMatch =
-          RegExp(r'<TrackDuration>(.*?)</TrackDuration>', dotAll: true)
-              .firstMatch(positionXml);
-      final RegExpMatch? positionMatch =
-          RegExp(r'<RelTime>(.*?)</RelTime>', dotAll: true)
-              .firstMatch(positionXml);
-      if (durationMatch != null) {
-        final Duration parsed = parseHms(durationMatch.group(1)!);
-        if (parsed > Duration.zero) {
-          duration = parsed;
+      if (positionSupported) {
+        final String positionXml = await device.position();
+        final RegExpMatch? durationMatch =
+            RegExp(r'<TrackDuration>(.*?)</TrackDuration>', dotAll: true)
+                .firstMatch(positionXml);
+        final RegExpMatch? positionMatch =
+            RegExp(r'<RelTime>(.*?)</RelTime>', dotAll: true)
+                .firstMatch(positionXml);
+        if (durationMatch != null) {
+          final Duration parsed = parseHms(durationMatch.group(1)!);
+          if (parsed > Duration.zero) {
+            duration = parsed;
+          }
         }
-      }
-      if (positionMatch != null && !_userSeeking) {
-        position = parseHms(positionMatch.group(1)!);
+        if (positionMatch != null && !_userSeeking) {
+          position = parseHms(positionMatch.group(1)!);
+        }
       }
       final String transportXml = await device.getTransportInfo();
       final RegExpMatch? stateMatch = RegExp(
