@@ -146,7 +146,18 @@ class _CastControlSheetState extends State<CastControlSheet> {
   }
 
   Widget _buildProgress(BuildContext context, ThemeData theme) {
-    final bool seekable = _cast.duration > Duration.zero;
+    if (_cast.positionSupported == false) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(
+          '该接收端未实现进度同步，仅支持投屏与切集',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    final bool seekable = _cast.duration > Duration.zero && _cast.seekSupported;
     final double maxSeconds =
         seekable ? _cast.duration.inSeconds.toDouble() : 1;
     final double raw = _dragSeconds ?? _cast.position.inSeconds.toDouble();
@@ -288,7 +299,9 @@ class _CastControlSheetState extends State<CastControlSheet> {
   String _statusText() {
     switch (_cast.transportState) {
       case 'PLAYING':
-        return '正在播放 · 进度实时同步';
+        return _cast.positionSupported
+            ? '正在播放 · 进度实时同步'
+            : '正在播放';
       case 'PAUSED_PLAYBACK':
         return '已暂停';
       case 'TRANSITIONING':
