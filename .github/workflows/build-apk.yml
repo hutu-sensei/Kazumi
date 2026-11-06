@@ -51,10 +51,31 @@ jobs:
         run: sed -i -e 's/-Wl,/-Wl,--build-id=none,/' ${{ steps.flutter-action.outputs.PUB-CACHE-PATH }}/hosted/pub.dev/jni-*/src/CMakeLists.txt
         continue-on-error: true
 
+      # 还原固定签名密钥：保证每个版本都由同一把钥匙签发，可直接覆盖安装。
+      # 私钥只存在 Secrets 里，绝不提交进仓库。
+      - name: Restore signing keystore
+        env:
+          CAST_KEYSTORE_BASE64: ${{ secrets.CAST_KEYSTORE_BASE64 }}
+          CAST_KEYSTORE_PASSWORD: ${{ secrets.CAST_KEYSTORE_PASSWORD }}
+          CAST_KEY_PASSWORD: ${{ secrets.CAST_KEY_PASSWORD }}
+          CAST_KEY_ALIAS: ${{ secrets.CAST_KEY_ALIAS }}
+        run: |
+          if [ -n "$CAST_KEYSTORE_BASE64" ]; then
+            echo "$CAST_KEYSTORE_BASE64" | base64 -d > android/app/kazumi-cast.p12
+            cat > android/app/key.properties <<EOF
+          storeFile=kazumi-cast.p12
+          storePassword=$CAST_KEYSTORE_PASSWORD
+          keyAlias=$CAST_KEY_ALIAS
+          keyPassword=$CAST_KEY_PASSWORD
+          EOF
+            echo "fixed signing keystore restored"
+          else
+            echo "no signing secret, fallback to debug key"
+          fi
+
       - name: Build APK (split per ABI)
-        # 测试版使用独立包名，可与正式版共存；正式构建不设该变量，包名保持原样
-        # KAZUMI_APPID / KAZUMI_KEY 是镜像签名凭据：未配置 secret 时为空，
-        # 代码会自动退回免签名镜像（api.bgmapi.com），搜索仍然可用
+        # 测试版使用独立包名，可与官方原版共存；
+        # KAZUMI_APPID / KAZUMI_KEY 未配置时为空，搜索保持上游原版行为
         env:
           ORG_GRADLE_PROJECT_kazumiAppIdSuffix: .cast
           KAZUMI_APPID: ${{ secrets.KAZUMI_APPID }}

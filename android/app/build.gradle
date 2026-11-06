@@ -22,6 +22,18 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
+// 固定签名：CI 会把 key.properties 与 keystore 从 Secrets 还原到 android/app/。
+// 没有这两个文件时回退 debug 签名，保证本地开发仍可 flutter run --release。
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('app/key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+def hasReleaseKeystore = keystorePropertiesFile.exists() &&
+        rootProject.file('app/' + (keystoreProperties.getProperty('storeFile') ?: '')).exists()
+
 android {
     namespace "com.example.kazumi"
     compileSdk flutter.compileSdkVersion
@@ -55,11 +67,25 @@ android {
         versionName flutterVersionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            cast {
+                storeFile file(keystoreProperties.getProperty('storeFile'))
+                storeType 'PKCS12'
+                storePassword keystoreProperties.getProperty('storePassword')
+                keyAlias keystoreProperties.getProperty('keyAlias')
+                keyPassword keystoreProperties.getProperty('keyPassword')
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig signingConfigs.debug
+            // 有固定密钥就用它，保证后续版本可直接覆盖安装；
+            // 本地没有密钥时退回 debug，不影响开发。
+            signingConfig hasReleaseKeystore
+                    ? signingConfigs.cast
+                    : signingConfigs.debug
         }
     }
 }
